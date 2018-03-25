@@ -156,6 +156,9 @@ AP_AdvancedFailsafe::check(uint32_t last_heartbeat_ms, bool geofence_breached, u
     if (!_enable) {
         return;
     }
+    // only set the termination capability, clearing it can mess up copter and sub which can always be terminated
+    hal.util->set_capabilities(MAV_PROTOCOL_CAPABILITY_FLIGHT_TERMINATION);
+
     // we always check for fence breach
     if(_enable_geofence_fs) {
         if (geofence_breached || check_altlimit()) {
@@ -322,6 +325,7 @@ AP_AdvancedFailsafe::check_altlimit(void)
     }
 
     // see if the barometer is dead
+    const AP_Baro &baro = AP::baro();
     if (AP_HAL::millis() - baro.get_last_update() > 5000) {
         // the barometer has been unresponsive for 5 seconds. See if we can switch to GPS
         if (_amsl_margin_gps != -1 &&

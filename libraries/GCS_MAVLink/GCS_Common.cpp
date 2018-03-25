@@ -19,6 +19,7 @@
 #include <AP_OpticalFlow/AP_OpticalFlow.h>
 #include <AP_Vehicle/AP_Vehicle.h>
 #include <AP_RangeFinder/RangeFinder_Backend.h>
+#include <AP_Airspeed/AP_Airspeed.h>
 
 #include "GCS.h"
 
@@ -28,6 +29,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#endif
+
+#ifdef HAL_RCINPUT_WITH_AP_RADIO
+#include <AP_Radio/AP_Radio.h>
+#include <AP_BoardConfig/AP_BoardConfig.h>
 #endif
 
 extern const AP_HAL::HAL& hal;
@@ -169,7 +175,7 @@ void GCS_MAVLINK::send_meminfo(void)
 {
     unsigned __brkval = 0;
     uint32_t memory = hal.util->available_memory();
-    mavlink_msg_meminfo_send(chan, __brkval, memory & 0xFFFF, memory);
+    mavlink_msg_meminfo_send(chan, __brkval, MIN(memory, 0xFFFFU), memory);
 }
 
 // report power supply status
@@ -195,9 +201,9 @@ void GCS_MAVLINK::send_battery_status(const AP_BattMonitor &battery, const uint8
                                     MAV_BATTERY_TYPE_UNKNOWN, // type
                                     got_temperature ? ((int16_t) (temp * 100)) : INT16_MAX, // temperature. INT16_MAX if unknown
                                     battery.get_cell_voltages(instance).cells, // cell voltages
-                                    battery.has_current(instance) ? battery.current_amps(instance) * 100 : -1, // current
-                                    battery.has_current(instance) ? battery.current_total_mah(instance) : -1, // total current
-                                    -1, // joules used
+                                    battery.has_current(instance) ? battery.current_amps(instance) * 100 : -1, // current in centiampere
+                                    battery.has_current(instance) ? battery.consumed_mah(instance) : -1,       // total consumed current in milliampere.hour
+                                    battery.has_consumed_energy(instance) ? battery.consumed_wh(instance) * 36 : -1, // consumed energy in hJ (hecto-Joules)
                                     battery.capacity_remaining_pct(instance));
 }
 
@@ -310,9 +316,10 @@ bool GCS_MAVLINK::send_proximity(const AP_Proximity &proximity) const
 }
 
 // report AHRS2 state
-void GCS_MAVLINK::send_ahrs2(AP_AHRS &ahrs)
+void GCS_MAVLINK::send_ahrs2()
 {
 #if AP_AHRS_NAVEKF_AVAILABLE
+    const AP_AHRS &ahrs = AP::ahrs();
     Vector3f euler;
     struct Location loc {};
     if (ahrs.get_secondary_attitude(euler)) {
@@ -324,11 +331,12 @@ void GCS_MAVLINK::send_ahrs2(AP_AHRS &ahrs)
                                loc.lat,
                                loc.lng);
     }
-    AP_AHRS_NavEKF &_ahrs = reinterpret_cast<AP_AHRS_NavEKF&>(ahrs);
-    if (_ahrs.get_NavEKF2().activeCores() > 0 &&
+    const AP_AHRS_NavEKF &_ahrs = reinterpret_cast<const AP_AHRS_NavEKF&>(ahrs);
+    const NavEKF2 &ekf2 = _ahrs.get_NavEKF2_const();
+    if (ekf2.activeCores() > 0 &&
         HAVE_PAYLOAD_SPACE(chan, AHRS3)) {
-        _ahrs.get_NavEKF2().getLLH(loc);
-        _ahrs.get_NavEKF2().getEulerAngles(-1,euler);
+        ekf2.getLLH(loc);
+        ekf2.getEulerAngles(-1,euler);
         mavlink_msg_ahrs3_send(chan,
                                euler.x,
                                euler.y,
@@ -556,6 +564,9 @@ void GCS_MAVLINK::handle_mission_write_partial_list(AP_Mission &mission, mavlink
     waypoint_receiving   = true;
     waypoint_request_i   = packet.start_index;
     waypoint_request_last= packet.end_index;
+
+    waypoint_dest_sysid = msg->sysid;       // record system id of GCS who wants to partially update the mission
+    waypoint_dest_compid = msg->compid;     // record component id of GCS who wants to partially update the mission
 }
 
 
@@ -1054,15 +1065,23 @@ void GCS_MAVLINK::send_raw_imu(const AP_InertialSensor &ins, const Compass &comp
         mag.z);        
 }
 
-void GCS_MAVLINK::send_scaled_pressure(AP_Baro &barometer)
+void GCS_MAVLINK::send_scaled_pressure()
 {
     uint32_t now = AP_HAL::millis();
+    const AP_Baro &barometer = AP::baro();
     float pressure = barometer.get_pressure(0);
+    float diff_pressure = 0; // pascal
+
+    AP_Airspeed *airspeed = AP_Airspeed::get_singleton();
+    if (airspeed != nullptr) {
+        diff_pressure = airspeed->get_differential_pressure();
+    }
+
     mavlink_msg_scaled_pressure_send(
         chan,
         now,
         pressure*0.01f, // hectopascal
-        (pressure - barometer.get_ground_pressure(0))*0.01f, // hectopascal
+        diff_pressure*0.01f, // hectopascal
         barometer.get_temperature(0)*100); // 0.01 degrees C
 
     if (barometer.num_instances() > 1 &&
@@ -1088,7 +1107,7 @@ void GCS_MAVLINK::send_scaled_pressure(AP_Baro &barometer)
     }
 }
 
-void GCS_MAVLINK::send_sensor_offsets(const AP_InertialSensor &ins, const Compass &compass, AP_Baro &barometer)
+void GCS_MAVLINK::send_sensor_offsets(const AP_InertialSensor &ins, const Compass &compass)
 {
     // run this message at a much lower rate - otherwise it
     // pointlessly wastes quite a lot of bandwidth
@@ -1101,6 +1120,8 @@ void GCS_MAVLINK::send_sensor_offsets(const AP_InertialSensor &ins, const Compas
     const Vector3f &mag_offsets = compass.get_offsets(0);
     const Vector3f &accel_offsets = ins.get_accel_offsets(0);
     const Vector3f &gyro_offsets = ins.get_gyro_offsets(0);
+
+    const AP_Baro &barometer = AP::baro();
 
     mavlink_msg_sensor_offsets_send(chan,
                                     mag_offsets.x,
@@ -1117,8 +1138,9 @@ void GCS_MAVLINK::send_sensor_offsets(const AP_InertialSensor &ins, const Compas
                                     accel_offsets.z);
 }
 
-void GCS_MAVLINK::send_ahrs(AP_AHRS &ahrs)
+void GCS_MAVLINK::send_ahrs()
 {
+    const AP_AHRS &ahrs = AP::ahrs();
     const Vector3f &omega_I = ahrs.get_gyro_drift();
     mavlink_msg_ahrs_send(
         chan,
@@ -1335,7 +1357,7 @@ MAV_RESULT GCS_MAVLINK::_set_mode_common(const MAV_MODE base_mode, const uint32_
 /*
   send OPTICAL_FLOW message
  */
-void GCS_MAVLINK::send_opticalflow(AP_AHRS_NavEKF &ahrs, const OpticalFlow &optflow)
+void GCS_MAVLINK::send_opticalflow(const OpticalFlow &optflow)
 {
     // exit immediately if no optical flow sensor or not healthy
     if (!optflow.healthy()) {
@@ -1345,11 +1367,13 @@ void GCS_MAVLINK::send_opticalflow(AP_AHRS_NavEKF &ahrs, const OpticalFlow &optf
     // get rates from sensor
     const Vector2f &flowRate = optflow.flowRate();
     const Vector2f &bodyRate = optflow.bodyRate();
+
+    const AP_AHRS &ahrs = AP::ahrs();
     float hagl = 0;
-
     if (ahrs.have_inertial_nav()) {
-
-        ahrs.get_hagl(hagl);
+        if (!ahrs.get_hagl(hagl)) {
+            return;
+        }
     }
 
     // populate and send message
@@ -1427,8 +1451,10 @@ void GCS_MAVLINK::send_autopilot_version() const
 /*
   send LOCAL_POSITION_NED message
  */
-void GCS_MAVLINK::send_local_position(const AP_AHRS &ahrs) const
+void GCS_MAVLINK::send_local_position() const
 {
+    const AP_AHRS &ahrs = AP::ahrs();
+
     Vector3f local_position, velocity;
     if (!ahrs.get_relative_position_NED_home(local_position) ||
         !ahrs.get_velocity_NED(velocity)) {
@@ -1813,6 +1839,41 @@ void GCS_MAVLINK::handle_set_gps_global_origin(const mavlink_message_t *msg)
 }
 
 /*
+  handle a DATA96 message
+ */
+void GCS_MAVLINK::handle_data_packet(mavlink_message_t *msg)
+{
+#ifdef HAL_RCINPUT_WITH_AP_RADIO
+    mavlink_data96_t m;
+    mavlink_msg_data96_decode(msg, &m);
+    switch (m.type) {
+    case 42:
+    case 43: {
+        // pass to AP_Radio (for firmware upload and playing test tunes)
+        AP_Radio *radio = AP_Radio::instance();
+        if (radio != nullptr) {
+            radio->handle_data_packet(chan, m);
+        }
+        break;
+    }
+    default:
+        // unknown
+        break;
+    }
+#endif
+}
+
+void GCS_MAVLINK::handle_vision_position_delta(mavlink_message_t *msg)
+{
+    AP_VisualOdom *visual_odom = get_visual_odom();
+    if (visual_odom == nullptr) {
+        return;
+    }
+
+    visual_odom->handle_msg(msg);
+}
+
+/*
   handle messages which don't require vehicle specific data
  */
 void GCS_MAVLINK::handle_common_message(mavlink_message_t *msg)
@@ -1925,6 +1986,14 @@ void GCS_MAVLINK::handle_common_message(mavlink_message_t *msg)
         /* fall through */
     case MAVLINK_MSG_ID_RALLY_FETCH_POINT:
         handle_common_rally_message(msg);
+        break;
+
+    case MAVLINK_MSG_ID_DATA96:
+        handle_data_packet(msg);
+        break;        
+
+    case MAVLINK_MSG_ID_VISION_POSITION_DELTA:
+        handle_vision_position_delta(msg);
         break;
     }
 
@@ -2075,6 +2144,20 @@ MAV_RESULT GCS_MAVLINK::handle_command_do_set_mode(const mavlink_command_long_t 
     return _set_mode_common(base_mode, custom_mode);
 }
 
+MAV_RESULT GCS_MAVLINK::handle_command_get_home_position(const mavlink_command_long_t &packet)
+{
+    if (!AP::ahrs().home_is_set()) {
+        return MAV_RESULT_FAILED;
+    }
+    send_home(AP::ahrs().get_home());
+
+    Location ekf_origin;
+    if (AP::ahrs().get_origin(ekf_origin)) {
+        send_ekf_origin(ekf_origin);
+    }
+    return MAV_RESULT_ACCEPTED;
+}
+
 MAV_RESULT GCS_MAVLINK::handle_command_long_message(mavlink_command_long_t &packet)
 {
     MAV_RESULT result = MAV_RESULT_FAILED;
@@ -2117,6 +2200,18 @@ MAV_RESULT GCS_MAVLINK::handle_command_long_message(mavlink_command_long_t &pack
         result = handle_command_preflight_set_sensor_offsets(packet);
         break;
     }
+
+    case MAV_CMD_GET_HOME_POSITION:
+        result = handle_command_get_home_position(packet);
+        break;
+
+    case MAV_CMD_PREFLIGHT_STORAGE:
+        if (is_equal(packet.param1, 2.0f)) {
+            AP_Param::erase_all();
+            send_text(MAV_SEVERITY_WARNING, "All parameters reset, reboot board");
+            result= MAV_RESULT_ACCEPTED;
+        }
+        break;
 
     case MAV_CMD_DO_SET_SERVO:
         /* fall through */
@@ -2317,6 +2412,16 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
         /* fall through */
     case MSG_SYSTEM_TIME:
         ret = try_send_gps_message(id);
+        break;
+
+    case MSG_LOCAL_POSITION:
+        CHECK_PAYLOAD_SIZE(LOCAL_POSITION_NED);
+        send_local_position();
+        break;
+
+    case MSG_AHRS:
+        CHECK_PAYLOAD_SIZE(AHRS);
+        send_ahrs();
         break;
 
     default:

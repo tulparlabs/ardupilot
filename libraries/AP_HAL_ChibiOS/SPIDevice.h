@@ -21,9 +21,9 @@
 #include "Scheduler.h"
 #include "Device.h"
 
-namespace ChibiOS {
+#if HAL_USE_SPI == TRUE
 
-class SPIDesc;
+namespace ChibiOS {
 
 class SPIBus : public DeviceBus {
 public:
@@ -32,7 +32,8 @@ public:
     uint8_t bus;
     SPIConfig spicfg;
     void dma_allocate(void);
-    void dma_deallocate(void);    
+    void dma_deallocate(void);
+    bool spi_started;
 };
 
 struct SPIDesc {
@@ -115,5 +116,6 @@ private:
     static SPIDesc device_table[];
     SPIBus *buses;
 };
-
 }
+
+#endif // HAL_USE_SPI

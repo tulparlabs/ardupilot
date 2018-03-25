@@ -103,8 +103,8 @@ public:
     void Log_Write_Parameter(const char *name, float value);
     void Log_Write_GPS(const AP_GPS &gps, uint8_t instance, uint64_t time_us=0);
     void Log_Write_RFND(const RangeFinder &rangefinder);
-    void Log_Write_IMU(const AP_InertialSensor &ins);
-    void Log_Write_IMUDT(const AP_InertialSensor &ins, uint64_t time_us, uint8_t imu_mask);
+    void Log_Write_IMU();
+    void Log_Write_IMUDT(uint64_t time_us, uint8_t imu_mask);
     bool Log_Write_ISBH(uint16_t seqno,
                         AP_InertialSensor::IMU_SENSOR_TYPE sensor_type,
                         uint8_t instance,
@@ -117,11 +117,11 @@ public:
                         const int16_t x[32],
                         const int16_t y[32],
                         const int16_t z[32]);
-    void Log_Write_Vibration(const AP_InertialSensor &ins);
+    void Log_Write_Vibration();
     void Log_Write_RCIN(void);
     void Log_Write_RCOUT(void);
     void Log_Write_RSSI(AP_RSSI &rssi);
-    void Log_Write_Baro(AP_Baro &baro, uint64_t time_us=0);
+    void Log_Write_Baro(uint64_t time_us=0);
     void Log_Write_Power(void);
     void Log_Write_AHRS2(AP_AHRS &ahrs);
     void Log_Write_POS(AP_AHRS &ahrs);
@@ -139,9 +139,9 @@ public:
     void Log_Write_Airspeed(AP_Airspeed &airspeed);
     void Log_Write_Attitude(AP_AHRS &ahrs, const Vector3f &targets);
     void Log_Write_AttitudeView(AP_AHRS_View &ahrs, const Vector3f &targets);
-    void Log_Write_Current(const AP_BattMonitor &battery);
+    void Log_Write_Current();
     void Log_Write_Compass(const Compass &compass, uint64_t time_us=0);
-    void Log_Write_Mode(uint8_t mode, uint8_t reason = 0);
+    void Log_Write_Mode(uint8_t mode, uint8_t reason);
 
     void Log_Write_EntireMission(const AP_Mission &mission);
     void Log_Write_Mission_Cmd(const AP_Mission &mission,
@@ -295,22 +295,19 @@ private:
     void Log_Write_EKF3(AP_AHRS_NavEKF &ahrs);
 #endif
 
-    void Log_Write_Baro_instance(AP_Baro &baro, uint64_t time_us, uint8_t baro_instance, enum LogMessages type);
-    void Log_Write_IMU_instance(const AP_InertialSensor &ins,
-                                uint64_t time_us,
+    void Log_Write_Baro_instance(uint64_t time_us, uint8_t baro_instance, enum LogMessages type);
+    void Log_Write_IMU_instance(uint64_t time_us,
                                 uint8_t imu_instance,
                                 enum LogMessages type);
     void Log_Write_Compass_instance(const Compass &compass,
                                     uint64_t time_us,
                                     uint8_t mag_instance,
                                     enum LogMessages type);
-    void Log_Write_Current_instance(const AP_BattMonitor &battery,
-                                    uint64_t time_us,
+    void Log_Write_Current_instance(uint64_t time_us,
                                     uint8_t battery_instance,
                                     enum LogMessages type,
                                     enum LogMessages celltype);
-    void Log_Write_IMUDT_instance(const AP_InertialSensor &ins,
-                                  uint64_t time_us,
+    void Log_Write_IMUDT_instance(uint64_t time_us,
                                   uint8_t imu_instance,
                                   enum LogMessages type);
 
@@ -340,7 +337,7 @@ private:
     // possibly expensive calls to start log system:
     void Prep();
 
-    bool _writes_enabled;
+    bool _writes_enabled:1;
 
     /* support for retrieving logs via mavlink: */
     uint8_t  _log_listing:1; // sending log list

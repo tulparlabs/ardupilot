@@ -41,6 +41,9 @@ public:
     // blocking lock call
     void lock(void);
 
+    // non-blocking lock call
+    bool lock_nonblock(void);
+    
     // unlock call. The DMA channel will not be immediately
     // deallocated. Instead it will be deallocated if another driver
     // needs it
@@ -49,15 +52,25 @@ public:
     // unlock call from an IRQ
     void unlock_from_IRQ(void);
 
+    // unlock call from a chSysLock zone
+    void unlock_from_lockzone(void);
+    
     //should be called inside the destructor of Shared DMA participants
     void unregister(void);
 
+    // lock all shared DMA channels. Used on reboot
+    static void lock_all(void);
+    
 private:
     dma_allocate_fn_t allocate;
     dma_allocate_fn_t deallocate;
     uint8_t stream_id1;
     uint8_t stream_id2;
+    bool have_lock;
 
+    // core of lock call, after semaphores gained
+    void lock_core(void);
+    
     static struct dma_lock {
         // semaphore to ensure only one peripheral uses a DMA channel at a time
         binary_semaphore_t semaphore;

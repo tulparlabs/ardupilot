@@ -258,7 +258,7 @@ void AP_Camera::send_feedback(mavlink_channel_t chan)
         current_loc.lat, current_loc.lng,
         altitude*1e-2, altitude_rel*1e-2,
         ahrs.roll_sensor*1e-2, ahrs.pitch_sensor*1e-2, ahrs.yaw_sensor*1e-2,
-        0.0f,CAMERA_FEEDBACK_PHOTO);
+        0.0f, CAMERA_FEEDBACK_PHOTO, _feedback_events);
 }
 
 
@@ -372,18 +372,18 @@ void AP_Camera::setup_feedback_callback(void)
         int fd = open("/dev/px4fmu", 0);
         if (fd != -1) {
             if (ioctl(fd, PWM_SERVO_SET_MODE, PWM_SERVO_MODE_3PWM1CAP) != 0) {
-                gcs().send_text(MAV_SEVERITY_WARNING, "Camera: unable to setup 3PWM1CAP\n");
+                gcs().send_text(MAV_SEVERITY_WARNING, "Camera: unable to setup 3PWM1CAP");
                 close(fd);
                 goto failed;
             }   
             if (up_input_capture_set(3, _feedback_polarity==1?Rising:Falling, 0, capture_callback, this) != 0) {
-                gcs().send_text(MAV_SEVERITY_WARNING, "Camera: unable to setup timer capture\n");
+                gcs().send_text(MAV_SEVERITY_WARNING, "Camera: unable to setup timer capture");
                 close(fd);
                 goto failed;
             }
             close(fd);
             _timer_installed = true;
-            gcs().send_text(MAV_SEVERITY_WARNING, "Camera: setup fast trigger capture\n");
+            gcs().send_text(MAV_SEVERITY_WARNING, "Camera: setup fast trigger capture");
         }
     }
 failed:
@@ -441,6 +441,7 @@ void AP_Camera::update_trigger()
 {
     trigger_pic_cleanup();
     if (check_trigger_pin()) {
+        _feedback_events++;
         gcs().send_message(MSG_CAMERA_FEEDBACK);
         DataFlash_Class *df = DataFlash_Class::instance();
         if (df != nullptr) {

@@ -4,7 +4,7 @@
 void Rover::update_mission(void)
 {
     if (control_mode == &mode_auto) {
-        if (home_is_set != HOME_UNSET && mission.num_commands() > 1) {
+        if (ahrs.home_is_set() && mission.num_commands() > 1) {
             mission.update();
         }
     }
@@ -319,7 +319,7 @@ bool Rover::verify_loiter_time(const AP_Mission::Mission_Command& cmd)
 {
     const bool result = verify_nav_wp(cmd);
     if (result) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "Finished active loiter\n");
+        gcs().send_text(MAV_SEVERITY_WARNING, "Finished active loiter");
     }
     return result;
 }

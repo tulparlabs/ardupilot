@@ -25,6 +25,7 @@ class AP_BattMonitor_Analog;
 class AP_BattMonitor_SMBus;
 class AP_BattMonitor_SMBus_Solo;
 class AP_BattMonitor_SMBus_Maxell;
+class AP_BattMonitor_UAVCAN;
 
 class AP_BattMonitor
 {
@@ -33,13 +34,18 @@ class AP_BattMonitor
     friend class AP_BattMonitor_SMBus;
     friend class AP_BattMonitor_SMBus_Solo;
     friend class AP_BattMonitor_SMBus_Maxell;
+    friend class AP_BattMonitor_UAVCAN;
 
 public:
-    AP_BattMonitor();
+    AP_BattMonitor(uint32_t log_battery_bit);
 
     /* Do not allow copies */
     AP_BattMonitor(const AP_BattMonitor &other) = delete;
     AP_BattMonitor &operator=(const AP_BattMonitor&) = delete;
+
+    static AP_BattMonitor &battery() {
+        return *_singleton;
+    }
 
     struct cells {
         uint16_t cells[MAVLINK_MSG_BATTERY_STATUS_FIELD_VOLTAGES_LEN];
@@ -50,11 +56,12 @@ public:
         cells       cell_voltages;      // battery cell voltages in millivolts, 10 cells matches the MAVLink spec
         float       voltage;            // voltage in volts
         float       current_amps;       // current in amperes
-        float       current_total_mah;  // total current draw since start-up
+        float       consumed_mah;       // total current draw in milliampere.hours since start-up
+        float       consumed_wh;        // total energy consumed in Watt.hours since start-up
         uint32_t    last_time_micros;   // time when voltage and current was last read
         uint32_t    low_voltage_start_ms;  // time when voltage dropped below the minimum
         float       temperature;        // battery temperature in celsius
-        uint32_t    temperature_time;   // timestamp of the last recieved temperature message
+        uint32_t    temperature_time;   // timestamp of the last received temperature message
         float       voltage_resting_estimate; // voltage with sag removed based on current and resistance estimate
         float       resistance;         // resistance calculated by comparing resting voltage vs in flight voltage
         bool        healthy;            // battery monitor is communicating correctly
@@ -73,6 +80,10 @@ public:
     bool healthy(uint8_t instance) const;
     bool healthy() const { return healthy(AP_BATT_PRIMARY_INSTANCE); }
 
+    /// has_consumed_energy - returns true if battery monitor instance provides consumed energy info
+    bool has_consumed_energy(uint8_t instance) const;
+    bool has_consumed_energy() const { return has_consumed_energy(AP_BATT_PRIMARY_INSTANCE); }
+
     /// has_current - returns true if battery monitor instance provides current info
     bool has_current(uint8_t instance) const;
     bool has_current() const { return has_current(AP_BATT_PRIMARY_INSTANCE); }
@@ -90,9 +101,13 @@ public:
     float current_amps(uint8_t instance) const;
     float current_amps() const { return current_amps(AP_BATT_PRIMARY_INSTANCE); }
 
-    /// current_total_mah - returns total current drawn since start-up in amp-hours
-    float current_total_mah(uint8_t instance) const;
-    float current_total_mah() const { return current_total_mah(AP_BATT_PRIMARY_INSTANCE); }
+    /// consumed_mah - returns total current drawn since start-up in milliampere.hours
+    float consumed_mah(uint8_t instance) const;
+    float consumed_mah() const { return consumed_mah(AP_BATT_PRIMARY_INSTANCE); }
+
+    /// consumed_wh - returns total energy drawn since start-up in watt.hours
+    float consumed_wh(uint8_t instance) const;
+    float consumed_wh() const { return consumed_wh(AP_BATT_PRIMARY_INSTANCE); }
 
     /// capacity_remaining_pct - returns the % battery capacity remaining (0 ~ 100)
     virtual uint8_t capacity_remaining_pct(uint8_t instance) const;
@@ -139,10 +154,17 @@ protected:
     AP_BattMonitor_Params _params[AP_BATT_MONITOR_MAX_INSTANCES];
 
 private:
+    static AP_BattMonitor *_singleton;
+
     BattMonitor_State state[AP_BATT_MONITOR_MAX_INSTANCES];
     AP_BattMonitor_Backend *drivers[AP_BATT_MONITOR_MAX_INSTANCES];
+    uint32_t    _log_battery_bit;
     uint8_t     _num_instances;                                     /// number of monitors
 
     void convert_params(void);
 
+};
+
+namespace AP {
+    AP_BattMonitor &battery();
 };

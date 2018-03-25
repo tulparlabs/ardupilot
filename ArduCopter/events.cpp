@@ -62,7 +62,7 @@ void Copter::failsafe_battery_event(void)
                 set_mode_SmartRTL_or_RTL(MODE_REASON_BATTERY_FAILSAFE);
             } else if (g.failsafe_battery_enabled == FS_BATT_SMARTRTL_OR_LAND) {
                 set_mode_SmartRTL_or_land_with_pause(MODE_REASON_BATTERY_FAILSAFE);
-            } else if (g.failsafe_battery_enabled == FS_BATT_RTL || control_mode == AUTO) {
+            } else if (g.failsafe_battery_enabled == FS_BATT_RTL) {
                 set_mode_RTL_or_land_with_pause(MODE_REASON_BATTERY_FAILSAFE);
             } else { // g.failsafe_battery_enabled == FS_BATT_LAND
                 set_mode_land_with_pause(MODE_REASON_BATTERY_FAILSAFE);
@@ -189,8 +189,10 @@ void Copter::failsafe_terrain_on_event()
 
     if (should_disarm_on_failsafe()) {
         init_disarm_motors();
+#if MODE_RTL_ENABLED == ENABLED
     } else if (control_mode == RTL) {
         mode_rtl.restart_without_terrain();
+#endif
     } else {
         set_mode_RTL_or_land_with_pause(MODE_REASON_TERRAIN_FAILSAFE);
     }

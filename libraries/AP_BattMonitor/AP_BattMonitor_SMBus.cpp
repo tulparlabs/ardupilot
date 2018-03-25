@@ -2,11 +2,6 @@
 
 #define AP_BATTMONITOR_SMBUS_PEC_POLYNOME 0x07 // Polynome for CRC generation
 
-#define BATTMONITOR_SMBUS_TEMP                 0x08 // temperature register
-#define BATTMONITOR_SMBUS_REMAINING_CAPACITY   0x0F // remaining capacity
-#define BATTMONITOR_SMBUS_FULL_CHARGE_CAPACITY 0x10 // full charge capacity
-#define BATTMONITOR_SMBUS_SERIAL               0x1C // serial number
-
 AP_BattMonitor_SMBus::AP_BattMonitor_SMBus(AP_BattMonitor &mon,
                                            AP_BattMonitor::BattMonitor_State &mon_state,
                                            AP_BattMonitor_Params &params,
@@ -64,7 +59,7 @@ bool AP_BattMonitor_SMBus::read_remaining_capacity(void)
     if (capacity > 0) {
         uint16_t data;
         if (read_word(BATTMONITOR_SMBUS_REMAINING_CAPACITY, data)) {
-            _state.current_total_mah = MAX(0, capacity - data);
+            _state.consumed_mah = MAX(0, capacity - data);
             return true;
         }
     }

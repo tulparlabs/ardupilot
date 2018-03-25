@@ -11,7 +11,7 @@ void loop();
 
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
-static AP_BattMonitor battery_mon;
+static AP_BattMonitor battery_mon{1<<9};
 uint32_t timer;
 
 void setup() {
@@ -50,7 +50,7 @@ void loop()
         hal.console->printf("\nVoltage: %.2f \tCurrent: %.2f \tTotCurr:%.2f",
                             (double)battery_mon.voltage(),
                             (double)battery_mon.current_amps(),
-                            (double)battery_mon.current_total_mah());
+                            (double)battery_mon.consumed_mah());
     }
 
     // delay 1ms
