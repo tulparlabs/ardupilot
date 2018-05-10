@@ -39,6 +39,10 @@ PA7 TIM3_CH2 TIM3 PWM(6) GPIO(106)
 PB0 TIM3_CH3 TIM3 PWM(7) GPIO(107)
 PB1 TIM3_CH4 TIM3 PWM(8) GPIO(108)
 
+# pins for detecting board type. On a pixhawk2 PC14 is pulled high,
+# PC15 is pulled low. On a Pixhawk1 they are both floating
+PC14 IO_HW_DETECT1 INPUT PULLDOWN 
+PC15 IO_HW_DETECT2 INPUT PULLUP   
 
 PB14 HEATER OUTPUT GPIO(0)
 
