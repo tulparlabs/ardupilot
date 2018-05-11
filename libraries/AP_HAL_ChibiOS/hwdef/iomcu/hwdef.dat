@@ -46,6 +46,12 @@ PC15 IO_HW_DETECT2 INPUT PULLUP
 
 PB14 HEATER OUTPUT GPIO(0)
 
+# safety button and LED. These do not use the same names
+# as those for FMU-only boards as we want to handle them specially
+# inside the iofirmware
+PB5 SAFETY_INPUT INPUT PULLDOWN
+PB13 SAFETY_LED OUTPUT HIGH
+
 PA8 INPUT PULLUP # RC Input PPM
 
 #Manually define ICU settings
