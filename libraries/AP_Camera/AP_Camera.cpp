@@ -266,6 +266,10 @@ void AP_Camera::send_feedback(mavlink_channel_t chan)
 */
 void AP_Camera::update()
 {
+    if (!_feedback_sem) {
+        _feedback_sem = hal.util->new_semaphore();
+    }
+    
     if (AP::gps().status() < AP_GPS::GPS_OK_FIX_3D) {
         return;
     }
@@ -325,7 +329,7 @@ void AP_Camera::feedback_pin_timer(void)
     uint8_t trigger_polarity = _feedback_polarity==0?0:1;
     if (pin_state == trigger_polarity &&
         _last_pin_state != trigger_polarity) {
-        _camera_triggered = true;
+        set_triggered_flag();
     }
     _last_pin_state = pin_state;
 }
@@ -349,10 +353,23 @@ bool AP_Camera::check_trigger_pin(void)
 void AP_Camera::capture_callback(void *context, uint32_t chan_index,
                                  hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow)
 {
-    _camera_triggered = true;    
+    AP_Camera *obj = (AP_Camera *)context;
+    obj->set_triggered_flag();
 }
 #endif
 
+/*
+  set the triggered flag and capture timestamp
+ */
+void AP_Camera::set_triggered_flag(void)
+{
+    _camera_triggered = true;    
+    if (_feedback_sem && _feedback_sem->take_nonblocking()) {
+        _feedback_timestamp_us = AP_HAL::micros64();
+        _feedback_sem->give();
+    }
+}
+    
 /*
   setup a callback for a feedback pin. When on PX4 with the right FMU
   mode we can use the microsecond timer.
@@ -446,7 +463,15 @@ void AP_Camera::update_trigger()
         DataFlash_Class *df = DataFlash_Class::instance();
         if (df != nullptr) {
             if (df->should_log(log_camera_bit)) {
-                df->Log_Write_Camera(ahrs, current_loc);
+                uint64_t timestamp = 0;
+                if (_feedback_sem && _feedback_sem->take_nonblocking()) {
+                    timestamp = _feedback_timestamp_us;
+                    _feedback_sem->give();
+                }
+                if (timestamp == 0) {
+                    timestamp = AP_HAL::micros64();
+                }
+                df->Log_Write_Camera(ahrs, current_loc, timestamp);
             }
         }
     }

@@ -87,6 +87,7 @@ private:
     void            relay_pic();        // basic relay activation
     void            feedback_pin_timer();
     void            setup_feedback_callback(void);
+    void            set_triggered_flag(void);
 #if CONFIG_HAL_BOARD == HAL_BOARD_PX4
     static void     capture_callback(void *context, uint32_t chan_index,
                                      hrt_abstime edge_time, uint32_t edge_state, uint32_t overflow);
@@ -108,6 +109,8 @@ private:
     static volatile bool   _camera_triggered;
     bool            _timer_installed:1;
     uint8_t         _last_pin_state;
+    AP_HAL::Semaphore *_feedback_sem;
+    uint64_t        _feedback_timestamp_us;
 
     void log_picture();
 
