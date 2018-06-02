@@ -1073,7 +1073,7 @@ bool RCOutput::serial_write_byte(uint8_t b)
     send_pulses_DMAR(*serial_group, 10*4*sizeof(uint32_t));
 
     // wait for the event
-    eventmask_t mask = chEvtWaitAnyTimeout(serial_event_mask, MS2ST(2));
+    eventmask_t mask = chEvtWaitAnyTimeout(serial_event_mask, chTimeMS2I(2));
 
     serial_group->in_serial_dma = false;
     
@@ -1165,7 +1165,7 @@ void RCOutput::serial_bit_irq(void)
 */
 bool RCOutput::serial_read_byte(uint8_t &b)
 {
-    bool timed_out = ((chEvtWaitAnyTimeout(serial_event_mask, MS2ST(10)) & serial_event_mask) == 0);
+    bool timed_out = ((chEvtWaitAnyTimeout(serial_event_mask, chTimeMS2I(10)) & serial_event_mask) == 0);
 
     uint16_t byteval = irq.byteval;
 
